@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>UL爬星星模擬器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 20px;
+            padding: 20px;
+            background-color: rgb(226, 226, 226);
+        }
+
+        .input-section {
+            width: 450px;
+            margin-bottom: 20px;
+            padding: 10px;
+            padding-top: 0px;
+            border: 1px solid #000000;
+            border-radius: 5px;
+        }
+
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+
+        .input-row {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>UL爬星星模擬器 (起始層數:75層)</h1>
+    <!-- 模式1: 計算達到目標層數所需道具 -->
+    <div class="input-section">
+        <h2>模式1: 計算達到目標層數所需道具</h2>
+        <div class="input-row">
+            初始點數: <input type="number" id="initialPoints1" min="2" max="12" value="7">
+        </div>
+        <div class="input-row">
+            目標層數: <input type="number" id="targetLevel" min="76" value="101">
+        </div>
+        <div id="requiredItemsResult" class="result"></div>
+    </div>
+
+    <!-- 模式2: 計算可達到的最高層數 -->
+    <div class="input-section">
+        <h2>模式2: 計算可達到的最高層數</h2>
+        <div class="input-row">
+            初始點數: <input type="number" id="initialPoints2" min="2" max="12" value="7">
+        </div>
+        <div class="input-row">
+            花1數量: <input type="number" id="item1" min="0" value="0">
+        </div>
+        <div class="input-row">
+            花3數量: <input type="number" id="item3" min="0" value="0">
+        </div>
+        <div class="input-row">
+            花5數量: <input type="number" id="item5" min="0" value="0">
+        </div>
+        <div class="input-row">
+            跳躍星數量: <input type="number" id="itemJump" min="0" value="0">
+        </div>
+        <div id="maxLevelResult" class="result"></div>
+    </div>
+
+    <script>
+        function getDiceSumProbabilities() {
+            const probabilities = new Array(13).fill(0);
+            for (let d1 = 1; d1 <= 6; d1++) {
+                for (let d2 = 1; d2 <= 6; d2++) {
+                    probabilities[d1 + d2]++;
+                }
+            }
+            return probabilities.map(count => count / 36);
+        }
+
+        function calculateOneAttemptExpectation(initialPoints) {
+            const probabilities = getDiceSumProbabilities();
+            let expectation = {
+                flower1: 0,
+                flower3: 0,
+                flower5: 0,
+                failProb: 0,
+                successProb: 0
+            };
+
+            for (let sum = initialPoints; sum <= 12; sum++) {
+                expectation.successProb += probabilities[sum];
+            }
+
+            for (let sum = 2; sum < initialPoints; sum++) {
+                const diff = initialPoints - sum;
+                const currentProb = probabilities[sum];
+
+                if (diff === 1) {
+                    expectation.flower1 += currentProb;
+                } else if (diff <= 3) {
+                    expectation.flower3 += currentProb;
+                } else if (diff <= 5) {
+                    expectation.flower5 += currentProb;
+                } else {
+                    expectation.failProb += currentProb;
+                }
+            }
+
+            return expectation;
+        }
+
+        function calculateExpectedItems(targetLevel, initialPoints) {
+            const levelDiff = targetLevel - 75;
+            const oneAttempt = calculateOneAttemptExpectation(initialPoints);
+            const actualAttempts = levelDiff / (1 - oneAttempt.failProb);
+
+            return {
+                flower1: oneAttempt.flower1 * actualAttempts,
+                flower3: oneAttempt.flower3 * actualAttempts,
+                flower5: oneAttempt.flower5 * actualAttempts
+            };
+        }
+
+        function calculateMaxLevelWithItems(initialPoints, items) {
+            const baseExpectation = calculateOneAttemptExpectation(initialPoints);
+
+            let successWithItems = baseExpectation.successProb;
+            successWithItems += items.flower1 * baseExpectation.flower1;
+            successWithItems += items.flower3 * baseExpectation.flower3;
+            successWithItems += items.flower5 * baseExpectation.flower5;
+
+            const flower1Contribution = Math.floor(items.flower1 * baseExpectation.flower1);
+            const flower3Contribution = Math.floor(items.flower3 * baseExpectation.flower3);
+            const flower5Contribution = Math.floor(items.flower5 * baseExpectation.flower5);
+
+            const totalSuccesses = Math.floor(successWithItems + items.jump);
+            const maxLevel = 75 + totalSuccesses;
+
+            return {
+                maxLevel: maxLevel,
+                details: {
+                    baseSuccess: baseExpectation.successProb,
+                    flower1Contribution: flower1Contribution,
+                    flower3Contribution: flower3Contribution,
+                    flower5Contribution: flower5Contribution,
+                    jumpStarContribution: items.jump
+                }
+            };
+        }
+
+        function updateRequiredItems() {
+            const targetLevel = parseInt(document.getElementById('targetLevel').value);
+            const initialPoints = parseInt(document.getElementById('initialPoints1').value);
+            const result = calculateExpectedItems(targetLevel, initialPoints);
+            document.getElementById('requiredItemsResult').innerHTML =
+                `初始點數: ${initialPoints}<br>` +
+                `達到 ${targetLevel} 層期望需要：<br>` +
+                `花1：${result.flower1.toFixed(1)} 個<br>` +
+                `花3：${result.flower3.toFixed(1)} 個<br>` +
+                `花5：${result.flower5.toFixed(1)} 個`;
+        }
+
+        function calculateMirroredSuccessRate(initialPoints) {
+    const mirrorPoints = initialPoints <= 7 ? initialPoints : 14 - initialPoints;
+    switch (mirrorPoints) {
+        case 2:
+            return 1.0; // 100%
+        case 3:
+            return 0.916; // 91.6%
+        case 4:
+            return 0.833; // 83.3%
+        case 5:
+            return 0.75; // 75%
+        case 6:
+            return 0.666; // 66.6%
+        case 7:
+            return 0.583; // 58.3%
+        default:
+            return 0; // 應該不會到這裡
+    }
+}
+
+function updateMaxLevel() {
+    const initialPoints = parseInt(document.getElementById('initialPoints2').value);
+    const items = {
+        flower1: parseInt(document.getElementById('item1').value) || 0,
+        flower3: parseInt(document.getElementById('item3').value) || 0,
+        flower5: parseInt(document.getElementById('item5').value) || 0,
+        jump: parseInt(document.getElementById('itemJump').value) || 0
+    };
+
+    const result = calculateMaxLevelWithItems(initialPoints, items);
+    const mirroredSuccessRate = calculateMirroredSuccessRate(initialPoints);
+
+    document.getElementById('maxLevelResult').innerHTML =
+        `初始點數: ${initialPoints}<br>` +
+        `使用現有道具預期可達到：${result.maxLevel} 層<br><br>` +
+        `詳細數據：<br>` +
+        `基礎成功率: ${(mirroredSuccessRate * 100).toFixed(1)}%<br>` +
+        `花1貢獻成功次數: ${result.details.flower1Contribution}<br>` +
+        `花3貢獻成功次數: ${result.details.flower3Contribution}<br>` +
+        `花5貢獻成功次數: ${result.details.flower5Contribution}<br>` +
+        `跳躍星貢獻成功次數: ${result.details.jumpStarContribution}`;
+}
+
+        window.onload = () => {
+            updateRequiredItems();
+            updateMaxLevel();
+        };
+
+        document.getElementById('initialPoints1').oninput = updateRequiredItems;
+        document.getElementById('targetLevel').oninput = updateRequiredItems;
+
+        document.getElementById('initialPoints2').oninput = updateMaxLevel;
+        document.getElementById('item1').oninput = updateMaxLevel;
+        document.getElementById('item3').oninput = updateMaxLevel;
+        document.getElementById('item5').oninput = updateMaxLevel;
+        document.getElementById('itemJump').oninput = updateMaxLevel;
+    </script>
+</body>
+
+</html>
